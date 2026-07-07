@@ -17,6 +17,9 @@ class BumpClassifierTest extends TestCase
         self::assertSame($expected, (new BumpClassifier())->classifyActual($from, $to));
     }
 
+    /**
+     * @return array<string, array{string, string, BumpLevel}>
+     */
     public static function bumpProvider(): array
     {
         return [

@@ -3,7 +3,7 @@
 
 /**
  * Worker: compares two source trees with magento-semver and prints one JSON document.
- * Usage: analyze-pair <before-dir> <after-dir> [report-types-csv] [includes-file] [excludes-file] [policy]
+ * Usage: analyze-pair <before-dir> <after-dir> [report-types-csv] [includes-file] [excludes-file] [policy].
  *
  * Policy 'magento' (default): magento-semver as-is — non-@api PHP changes dampen to PATCH.
  * Policy 'strict': strict semver for PHP — every public signature is a contract
@@ -78,7 +78,7 @@ function findPhpFiles(string $root, string $excludesPath): array
         new RecursiveDirectoryIterator($root, FilesystemIterator::SKIP_DOTS),
     );
     foreach ($iterator as $file) {
-        if ($file->getExtension() !== 'php') {
+        if (!$file instanceof SplFileInfo || $file->getExtension() !== 'php') {
             continue;
         }
         $relative = substr($file->getPathname(), strlen($root));
@@ -100,7 +100,7 @@ function findPhpFiles(string $root, string $excludesPath): array
  * and parameter typing changes (V060 etc.) as PATCH where semver says MAJOR —
  * so we reuse the same override table magento-semver applies during its own run.
  */
-function analyzePhpStrict(string $beforeDir, string $afterDir, string $excludesPath): \PHPSemVerChecker\Report\Report
+function analyzePhpStrict(string $beforeDir, string $afterDir, string $excludesPath): PHPSemVerChecker\Report\Report
 {
     $registries = [];
     foreach ([$beforeDir, $afterDir] as $dir) {
@@ -116,8 +116,8 @@ function analyzePhpStrict(string $beforeDir, string $afterDir, string $excludesP
     }
 
     // Report buckets are keyed by the level active at analyze() time.
-    $originalMapping = \PHPSemVerChecker\Configuration\LevelMapping::$mapping;
-    \PHPSemVerChecker\Configuration\LevelMapping::setOverrides([
+    $originalMapping = PHPSemVerChecker\Configuration\LevelMapping::$mapping;
+    PHPSemVerChecker\Configuration\LevelMapping::setOverrides([
         'V015' => Level::MINOR, // Add public method
         'V016' => Level::PATCH, // Add protected method
         'V019' => Level::MINOR, // Add public property
@@ -138,7 +138,7 @@ function analyzePhpStrict(string $beforeDir, string $afterDir, string $excludesP
         // Drop the V150–V160 "name case was changed" operations: under php-parser 5 the
         // analyzer compares Identifier objects with !==, so they fire on identical names.
         // Must happen while the overrides are active — Report::add() re-reads the mapping.
-        $filtered = new \PHPSemVerChecker\Report\Report();
+        $filtered = new PHPSemVerChecker\Report\Report();
         foreach ($report as $context => $levels) {
             foreach ($levels as $operations) {
                 foreach ($operations as $operation) {
@@ -149,7 +149,7 @@ function analyzePhpStrict(string $beforeDir, string $afterDir, string $excludesP
             }
         }
     } finally {
-        \PHPSemVerChecker\Configuration\LevelMapping::setOverrides($originalMapping);
+        PHPSemVerChecker\Configuration\LevelMapping::setOverrides($originalMapping);
     }
 
     return $filtered;
@@ -207,29 +207,31 @@ try {
     // sub-reports at different severities; keep only the highest level per change.
     $changes = [];
     $reports = array_values(array_filter([$report, $strictReport]));
-    foreach ($reports as $sourceReport) foreach ($sourceReport as $context => $levels) {
-        foreach ($levels as $changeLevel => $operations) {
-            foreach ($operations as $operation) {
-                $location = $operation->getLocation();
-                foreach ([$beforeDir, $afterDir] as $root) {
-                    if (str_starts_with($location, $root)) {
-                        $location = substr($location, strlen($root));
-                        break;
+    foreach ($reports as $sourceReport) {
+        foreach ($sourceReport as $context => $levels) {
+            foreach ($levels as $changeLevel => $operations) {
+                foreach ($operations as $operation) {
+                    $location = $operation->getLocation();
+                    foreach ([$beforeDir, $afterDir] as $root) {
+                        if (str_starts_with($location, $root)) {
+                            $location = substr($location, strlen($root));
+                            break;
+                        }
                     }
+                    $key = $context . '|' . $location . '|' . $operation->getTarget() . '|' . $operation->getCode();
+                    if (isset($changes[$key]) && $changes[$key]['_level'] >= $changeLevel) {
+                        continue;
+                    }
+                    $changes[$key] = [
+                        'context' => $context,
+                        'level' => $levelNames[$changeLevel] ?? (string) $changeLevel,
+                        'location' => $location,
+                        'target' => $operation->getTarget(),
+                        'reason' => $operation->getReason(),
+                        'code' => $operation->getCode(),
+                        '_level' => $changeLevel,
+                    ];
                 }
-                $key = $context . '|' . $location . '|' . $operation->getTarget() . '|' . $operation->getCode();
-                if (isset($changes[$key]) && $changes[$key]['_level'] >= $changeLevel) {
-                    continue;
-                }
-                $changes[$key] = [
-                    'context' => (string) $context,
-                    'level' => $levelNames[$changeLevel] ?? (string) $changeLevel,
-                    'location' => $location,
-                    'target' => $operation->getTarget(),
-                    'reason' => $operation->getReason(),
-                    'code' => $operation->getCode(),
-                    '_level' => $changeLevel,
-                ];
             }
         }
     }

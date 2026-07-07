@@ -131,7 +131,7 @@ class AuditorTest extends TestCase
         }
 
         $repository = new RepositoryClient(
-            httpGet: fn () => json_encode(['packages' => ['acme/demo' => $entries]]),
+            httpGet: fn () => json_encode(['packages' => ['acme/demo' => $entries]], JSON_THROW_ON_ERROR),
         );
 
         $zipPath = $this->workDir . '/module.zip';

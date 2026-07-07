@@ -1,0 +1,7 @@
+<?php
+
+namespace PHPSemVerChecker\Operation;
+
+abstract class Operation
+{
+}

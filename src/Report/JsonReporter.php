@@ -39,7 +39,7 @@ class JsonReporter
                 'summary' => $report->summary(),
                 'followsSemver' => $report->followsSemver(),
             ],
-            JSON_PRETTY_PRINT | JSON_UNESCAPED_SLASHES,
+            JSON_PRETTY_PRINT | JSON_UNESCAPED_SLASHES | JSON_THROW_ON_ERROR,
         ));
     }
 }

@@ -38,32 +38,35 @@ class RepositoryClient
         try {
             $body = ($this->httpGet)($url, $this->basicAuth);
         } catch (\RuntimeException $e) {
-            throw new RepositoryException(
-                "Cannot fetch metadata for {$packageName}: {$e->getMessage()}",
-                previous: $e,
-            );
+            throw new RepositoryException("Cannot fetch metadata for {$packageName}: {$e->getMessage()}", previous: $e);
         }
 
         $data = json_decode($body, true);
-        $versions = $data['packages'][$packageName] ?? null;
+        $packages = is_array($data) && is_array($data['packages'] ?? null) ? $data['packages'] : [];
+        $versions = $packages[$packageName] ?? null;
         if (!is_array($versions) || $versions === []) {
             throw new RepositoryException("No versions found for {$packageName} at {$url}.");
         }
 
-        $expanded = MetadataMinifier::expand($versions);
+        $expanded = MetadataMinifier::expand(array_values($versions));
 
         $releases = [];
         foreach ($expanded as $version) {
-            $normalized = $version['version_normalized'] ?? null;
-            if ($normalized === null || isset($releases[$normalized])) {
+            if (!is_array($version)) {
                 continue;
             }
+            $name = $version['version'] ?? null;
+            $normalized = $version['version_normalized'] ?? null;
+            if (!is_string($name) || !is_string($normalized) || isset($releases[$normalized])) {
+                continue;
+            }
+            $dist = is_array($version['dist'] ?? null) ? $version['dist'] : [];
             $releases[$normalized] = new Release(
-                version: $version['version'],
+                version: $name,
                 normalized: $normalized,
-                distUrl: $version['dist']['url'] ?? null,
-                distType: $version['dist']['type'] ?? null,
-                time: $version['time'] ?? null,
+                distUrl: is_string($dist['url'] ?? null) ? $dist['url'] : null,
+                distType: is_string($dist['type'] ?? null) ? $dist['type'] : null,
+                time: is_string($version['time'] ?? null) ? $version['time'] : null,
             );
         }
 

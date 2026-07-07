@@ -1,0 +1,13 @@
+<?php
+
+namespace PHPSemVerChecker\Report;
+
+/**
+ * Iterates as context ("class", "function", …) => [level int => list of operations].
+ *
+ * @implements \ArrayAccess<string, array<int, list<\PHPSemVerChecker\Operation\Operation>>>
+ * @implements \IteratorAggregate<string, array<int, list<\PHPSemVerChecker\Operation\Operation>>>
+ */
+class Report implements \ArrayAccess, \IteratorAggregate
+{
+}

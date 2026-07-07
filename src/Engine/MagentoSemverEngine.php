@@ -55,14 +55,54 @@ class MagentoSemverEngine implements EngineInterface
         }
 
         $payload = json_decode($process->getOutput(), true);
-        if (!is_array($payload) || !isset($payload['level'])) {
+        $level = is_array($payload) ? ($payload['level'] ?? null) : null;
+        if (!is_int($level) || BumpLevel::tryFrom($level) === null) {
             return AnalysisResult::failure('analyze-pair produced invalid JSON output.');
         }
 
         return AnalysisResult::success(
-            BumpLevel::fromLevelInt((int) $payload['level']),
-            $payload['changes'] ?? [],
+            BumpLevel::from($level),
+            self::normalizeChanges(is_array($payload['changes'] ?? null) ? $payload['changes'] : []),
         );
+    }
+
+    /**
+     * The worker's JSON is trusted in practice but typed as mixed at this boundary;
+     * keep only well-formed change entries.
+     *
+     * @param array<mixed> $rawChanges
+     *
+     * @return array<int, array{context: string, level: string, location: string, target: string, reason: string, code: string}>
+     */
+    private static function normalizeChanges(array $rawChanges): array
+    {
+        $changes = [];
+        foreach ($rawChanges as $change) {
+            if (!is_array($change)) {
+                continue;
+            }
+            $context = $change['context'] ?? null;
+            $level = $change['level'] ?? null;
+            $location = $change['location'] ?? null;
+            $target = $change['target'] ?? null;
+            $reason = $change['reason'] ?? null;
+            $code = $change['code'] ?? null;
+            if (!is_string($context) || !is_string($level) || !is_string($location)
+                || !is_string($target) || !is_string($reason) || !is_string($code)
+            ) {
+                continue;
+            }
+            $changes[] = [
+                'context' => $context,
+                'level' => $level,
+                'location' => $location,
+                'target' => $target,
+                'reason' => $reason,
+                'code' => $code,
+            ];
+        }
+
+        return $changes;
     }
 
     public function name(): string

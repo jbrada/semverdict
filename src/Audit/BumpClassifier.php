@@ -41,6 +41,6 @@ class BumpClassifier
         $numeric = explode('-', $normalized, 2)[0];
         $parts = explode('.', $numeric);
 
-        return [(int) ($parts[0] ?? 0), (int) ($parts[1] ?? 0), (int) ($parts[2] ?? 0)];
+        return [(int) $parts[0], (int) ($parts[1] ?? 0), (int) ($parts[2] ?? 0)];
     }
 }

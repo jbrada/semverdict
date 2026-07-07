@@ -1,0 +1,12 @@
+parameters:
+    level: max
+    paths:
+        - src
+        - tests
+        - bin/analyze-pair
+    bootstrapFiles:
+        - vendor/autoload.php
+    stubFiles:
+        - stubs/Operation.stub
+        - stubs/Report.stub
+        - stubs/SemanticVersionChecker.stub

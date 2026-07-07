@@ -53,7 +53,7 @@ class ArchiveCacheTest extends TestCase
         $cache = new ArchiveCache(
             $this->workDir . '/cache',
             httpDownload: function (string $url, string $dest) use ($zipPath, &$downloads): void {
-                $downloads++;
+                ++$downloads;
                 copy($zipPath, $dest);
             },
         );
@@ -89,7 +89,7 @@ class ArchiveCacheTest extends TestCase
         $cache = new ArchiveCache(
             $this->workDir . '/cache',
             httpDownload: function (string $url, string $dest) use ($zipPath, &$downloads): void {
-                $downloads++;
+                ++$downloads;
                 copy($zipPath, $dest);
             },
         );

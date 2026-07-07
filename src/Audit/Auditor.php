@@ -47,13 +47,11 @@ class Auditor
         }
 
         if (count($auditable) < 2) {
-            throw new RepositoryException(
-                "Package {$package} has fewer than 2 auditable releases (nothing to compare).",
-            );
+            throw new RepositoryException("Package {$package} has fewer than 2 auditable releases (nothing to compare).");
         }
 
         $pairs = [];
-        for ($i = 1, $n = count($auditable); $i < $n; $i++) {
+        for ($i = 1, $n = count($auditable); $i < $n; ++$i) {
             $pairs[] = [$auditable[$i - 1], $auditable[$i]];
         }
         if ($options->limit !== null && $options->limit > 0) {
@@ -83,11 +81,11 @@ class Auditor
         }
 
         $analysis = $this->engine->compare($beforeDir, $afterDir, $options->reportTypes);
-        if ($analysis->failed) {
+        $required = $analysis->requiredLevel;
+        if ($analysis->failed || $required === null) {
             return new PairResult($from->version, $to->version, $actual, null, Verdict::Failed, error: $analysis->error);
         }
 
-        $required = $analysis->requiredLevel;
         $verdict = match (true) {
             $actual === $required => Verdict::Ok,
             $actual->isAtLeast($required) => Verdict::Over,

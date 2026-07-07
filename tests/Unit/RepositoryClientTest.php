@@ -37,7 +37,7 @@ class RepositoryClientTest extends TestCase
                 ],
             ],
             'minified' => 'composer/2.0',
-        ]);
+        ], JSON_THROW_ON_ERROR);
 
         $requestedUrls = [];
         $client = new RepositoryClient(
@@ -65,7 +65,7 @@ class RepositoryClientTest extends TestCase
                     ['version' => '1.0.0', 'version_normalized' => '1.0.0.0', 'dist' => ['url' => 'b', 'type' => 'zip']],
                 ],
             ],
-        ]);
+        ], JSON_THROW_ON_ERROR);
 
         $client = new RepositoryClient(httpGet: fn () => $body);
         $releases = $client->getReleases('acme/demo');
@@ -89,7 +89,7 @@ class RepositoryClientTest extends TestCase
     {
         $requests = 0;
         $client = new RepositoryClient(httpGet: function () use (&$requests): string {
-            $requests++;
+            ++$requests;
 
             return '{}';
         });
@@ -105,7 +105,7 @@ class RepositoryClientTest extends TestCase
 
     public function testThrowsOnEmptyVersionList(): void
     {
-        $client = new RepositoryClient(httpGet: fn () => json_encode(['packages' => []]));
+        $client = new RepositoryClient(httpGet: fn () => json_encode(['packages' => []], JSON_THROW_ON_ERROR));
 
         $this->expectException(RepositoryException::class);
         $client->getReleases('acme/demo');

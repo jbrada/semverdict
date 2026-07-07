@@ -15,6 +15,9 @@ final class Release
     ) {
     }
 
+    /**
+     * @phpstan-assert-if-true string $this->distUrl
+     */
     public function hasZipDist(): bool
     {
         return $this->distUrl !== null && $this->distType === 'zip';

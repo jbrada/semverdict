@@ -30,7 +30,7 @@ class Http
      * Streams a URL to a local file without buffering the whole body in memory.
      *
      * @throws RuntimeException on any HTTP or transport failure, or when the
-     *         received size does not match the Content-Length header
+     *                          received size does not match the Content-Length header
      */
     public static function download(string $url, string $destPath, ?string $basicAuth = null): void
     {
@@ -49,12 +49,7 @@ class Http
         $expected = self::headerValue($headers, 'Content-Length');
         if ($copied === false || !$flushed || ($expected !== null && $copied !== (int) $expected)) {
             @unlink($destPath);
-            throw new RuntimeException(sprintf(
-                'Download of %s is incomplete (%s of %s bytes received).',
-                $url,
-                $copied === false ? 'unknown' : $copied,
-                $expected ?? 'unknown',
-            ));
+            throw new RuntimeException(sprintf('Download of %s is incomplete (%s of %s bytes received).', $url, $copied === false ? 'unknown' : $copied, $expected ?? 'unknown'));
         }
     }
 
@@ -70,7 +65,7 @@ class Http
     private static function open(string $url, ?string $basicAuth): array
     {
         $auth = $basicAuth;
-        for ($hop = 0; $hop <= self::MAX_REDIRECTS; $hop++) {
+        for ($hop = 0; $hop <= self::MAX_REDIRECTS; ++$hop) {
             // Dist URLs come from repository metadata; never fetch anything but http(s)
             // (a hostile repo must not be able to point at file:// or phar:// paths).
             if (!preg_match('#^https?://#i', $url)) {
@@ -83,7 +78,10 @@ class Http
                 throw new RuntimeException("HTTP request failed for {$url}: {$reason}");
             }
 
-            $headers = stream_get_meta_data($stream)['wrapper_data'] ?? [];
+            $wrapperData = stream_get_meta_data($stream)['wrapper_data'] ?? [];
+            $headers = is_array($wrapperData)
+                ? array_values(array_filter($wrapperData, static fn ($line): bool => is_string($line)))
+                : [];
             $status = self::statusCode($headers);
             if ($status >= 200 && $status < 300) {
                 return [$stream, $headers];
@@ -194,11 +192,15 @@ class Http
     {
         $partsA = parse_url($a);
         $partsB = parse_url($b);
-        $port = static fn (array $parts): int => $parts['port']
-            ?? (strtolower($parts['scheme'] ?? '') === 'https' ? 443 : 80);
+        if ($partsA === false || $partsB === false) {
+            return false;
+        }
+
+        $portA = $partsA['port'] ?? (strtolower($partsA['scheme'] ?? '') === 'https' ? 443 : 80);
+        $portB = $partsB['port'] ?? (strtolower($partsB['scheme'] ?? '') === 'https' ? 443 : 80);
 
         return strtolower($partsA['scheme'] ?? '') === strtolower($partsB['scheme'] ?? '')
             && strtolower($partsA['host'] ?? '') === strtolower($partsB['host'] ?? '')
-            && $port($partsA) === $port($partsB);
+            && $portA === $portB;
     }
 }

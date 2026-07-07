@@ -11,14 +11,6 @@ enum BumpLevel: int
     case Minor = 2;
     case Major = 3;
 
-    /**
-     * Maps a PHPSemVerChecker\SemanticVersioning\Level constant to a BumpLevel.
-     */
-    public static function fromLevelInt(int $svcLevel): self
-    {
-        return self::from($svcLevel);
-    }
-
     public function isAtLeast(self $other): bool
     {
         return $this->value >= $other->value;

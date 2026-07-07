@@ -38,9 +38,29 @@ jobs:
       - name: Run tests
         run: vendor/bin/phpunit
 
+  quality:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: shivammathur/setup-php@v2
+        with:
+          php-version: '8.4'
+          extensions: json, zip
+          coverage: none
+
+      - name: Install dependencies
+        run: composer install --prefer-dist --no-progress --no-interaction
+
+      - name: PHPStan (level max)
+        run: composer analyse
+
+      - name: Code style
+        run: composer cs
+
   docker:
     runs-on: ubuntu-latest
-    needs: tests
+    needs: [tests, quality]
     steps:
       - uses: actions/checkout@v4
 

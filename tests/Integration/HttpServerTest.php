@@ -16,6 +16,7 @@ use Symfony\Component\Process\Process;
  */
 class HttpServerTest extends TestCase
 {
+    /** @var list<Process> */
     private static array $processes = [];
     private static string $originA;
     private static string $originB;
@@ -128,15 +129,21 @@ class HttpServerTest extends TestCase
     private static function freePort(): int
     {
         $socket = stream_socket_server('tcp://127.0.0.1:0');
-        $port = (int) explode(':', stream_socket_get_name($socket, false))[1];
+        if ($socket === false) {
+            self::fail('Cannot open a socket to find a free port.');
+        }
+        $name = stream_socket_get_name($socket, false);
         fclose($socket);
+        if ($name === false) {
+            self::fail('Cannot determine the test socket name.');
+        }
 
-        return $port;
+        return (int) explode(':', $name)[1];
     }
 
     private static function waitForPort(int $port): void
     {
-        for ($i = 0; $i < 100; $i++) {
+        for ($i = 0; $i < 100; ++$i) {
             $socket = @fsockopen('127.0.0.1', $port, timeout: 0.1);
             if ($socket !== false) {
                 fclose($socket);

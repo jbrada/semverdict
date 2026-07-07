@@ -21,6 +21,8 @@
         "symfony/process": "~7.4.0"
     },
     "require-dev": {
+        "friendsofphp/php-cs-fixer": "^3.95",
+        "phpstan/phpstan": "^2.2",
         "phpunit/phpunit": "^11.5"
     },
     "repositories": [
@@ -43,6 +45,10 @@
         "bin/semverdict"
     ],
     "scripts": {
+        "analyse": "phpstan analyse --memory-limit=1G",
+        "check": ["@cs", "@analyse", "@test"],
+        "cs": "php-cs-fixer fix --dry-run --diff",
+        "cs:fix": "php-cs-fixer fix",
         "test": "phpunit",
         "test:unit": "phpunit --testsuite=unit"
     },

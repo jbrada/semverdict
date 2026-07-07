@@ -1,0 +1,20 @@
+<?php
+
+namespace Magento\SemanticVersionChecker;
+
+class SemanticVersionChecker
+{
+    /**
+     * @return \PHPSemVerChecker\Report\Report
+     */
+    public function loadVersionReport()
+    {
+    }
+
+    /**
+     * @return int
+     */
+    public function getVersionIncrease()
+    {
+    }
+}

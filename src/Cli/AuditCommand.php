@@ -52,7 +52,8 @@ class AuditCommand extends Command
 
     protected function execute(InputInterface $input, OutputInterface $output): int
     {
-        $package = strtolower((string) $input->getArgument('package'));
+        $packageInput = $input->getArgument('package');
+        $package = strtolower(is_string($packageInput) ? $packageInput : '');
         if (!PackageName::isValid($package)) {
             $output->writeln("<error>Invalid package name: {$package}</error>");
 
@@ -60,10 +61,12 @@ class AuditCommand extends Command
         }
 
         $stderr = $output instanceof ConsoleOutputInterface ? $output->getErrorOutput() : $output;
-        $auth = $input->getOption('auth');
-        $limit = $input->getOption('limit');
-        $reportTypes = $input->getOption('report-types');
-        $reportTypes = $reportTypes !== null ? array_values(array_filter(array_map('trim', explode(',', $reportTypes)))) : [];
+        $auth = self::stringOption($input, 'auth');
+        $limit = self::stringOption($input, 'limit');
+        $reportTypesInput = self::stringOption($input, 'report-types');
+        $reportTypes = $reportTypesInput !== null
+            ? array_values(array_filter(array_map('trim', explode(',', $reportTypesInput))))
+            : [];
         if ($unknown = array_diff($reportTypes, self::REPORT_TYPES)) {
             $output->writeln(sprintf(
                 '<error>Unknown report type(s): %s (expected any of %s)</error>',
@@ -73,7 +76,7 @@ class AuditCommand extends Command
 
             return self::EXIT_FATAL;
         }
-        $policy = (string) $input->getOption('policy');
+        $policy = self::stringOption($input, 'policy') ?? 'magento';
         if (!in_array($policy, ['magento', 'strict'], true)) {
             $output->writeln("<error>Invalid --policy: {$policy} (expected magento or strict)</error>");
 
@@ -82,8 +85,8 @@ class AuditCommand extends Command
 
         $projectRoot = dirname(__DIR__, 2);
         $auditor = new Auditor(
-            new RepositoryClient((string) $input->getOption('repo'), $auth),
-            new ArchiveCache((string) $input->getOption('cache-dir'), $auth),
+            new RepositoryClient(self::stringOption($input, 'repo') ?? 'https://repo.packagist.org', $auth),
+            new ArchiveCache(self::stringOption($input, 'cache-dir') ?? getcwd() . '/.semverdict-cache', $auth),
             new MagentoSemverEngine(
                 workerPath: $projectRoot . '/bin/analyze-pair',
                 includesPath: $projectRoot . '/resources/module_includes.txt',
@@ -122,5 +125,12 @@ class AuditCommand extends Command
         }
 
         return $report->followsSemver() ? self::EXIT_COMPLIANT : self::EXIT_VIOLATIONS;
+    }
+
+    private static function stringOption(InputInterface $input, string $name): ?string
+    {
+        $value = $input->getOption($name);
+
+        return is_string($value) ? $value : null;
     }
 }
