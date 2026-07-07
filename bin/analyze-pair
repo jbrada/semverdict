@@ -31,17 +31,27 @@ error_reporting(E_ALL & ~E_DEPRECATED);
 ini_set('display_errors', 'stderr');
 ini_set('memory_limit', '1G');
 
-if ($argc < 3) {
+// $_SERVER['argv'] instead of $argv: the latter only exists when the
+// register_argc_argv ini setting is on.
+$rawArgs = $_SERVER['argv'] ?? [];
+$args = [];
+foreach (is_array($rawArgs) ? $rawArgs : [] as $arg) {
+    if (is_string($arg)) {
+        $args[] = $arg;
+    }
+}
+
+if (count($args) < 3) {
     fwrite(STDERR, "Usage: analyze-pair <before-dir> <after-dir> [report-types-csv] [includes] [excludes]\n");
     exit(2);
 }
 
-$beforeDir = realpath($argv[1]);
-$afterDir = realpath($argv[2]);
-$reportTypes = isset($argv[3]) && $argv[3] !== '' ? explode(',', $argv[3]) : [];
-$includesPath = $argv[4] ?? __DIR__ . '/../resources/module_includes.txt';
-$excludesPath = $argv[5] ?? __DIR__ . '/../resources/module_excludes.txt';
-$policy = $argv[6] ?? 'magento';
+$beforeDir = realpath($args[1]);
+$afterDir = realpath($args[2]);
+$reportTypes = isset($args[3]) && $args[3] !== '' ? explode(',', $args[3]) : [];
+$includesPath = $args[4] ?? __DIR__ . '/../resources/module_includes.txt';
+$excludesPath = $args[5] ?? __DIR__ . '/../resources/module_excludes.txt';
+$policy = $args[6] ?? 'magento';
 
 if ($beforeDir === false || $afterDir === false) {
     fwrite(STDERR, "Source directories do not exist.\n");
