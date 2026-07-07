@@ -1,0 +1,4 @@
+Test/*
+tests/*
+dev/tests/*
+.github/*

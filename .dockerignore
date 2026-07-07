@@ -1,0 +1,10 @@
+.git/
+.github/
+.idea/
+.phpunit.cache/
+.semverdict-cache/
+vendor/
+tests/
+Dockerfile
+.dockerignore
+.DS_Store

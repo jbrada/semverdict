@@ -1,0 +1,55 @@
+{
+    "name": "jbrada/semverdict",
+    "description": "Audits whether a composer package's release history followed semantic versioning, using Magento's Semantic Version Checker.",
+    "type": "project",
+    "license": "MIT",
+    "keywords": ["semver", "semantic-versioning", "magento", "magento2", "audit", "composer", "quality", "backward-compatibility"],
+    "authors": [
+        {
+            "name": "Jiří Brada",
+            "email": "jiri@jbrada.cz"
+        }
+    ],
+    "require": {
+        "php": "^8.2",
+        "ext-json": "*",
+        "ext-zip": "*",
+        "composer/metadata-minifier": "^1.0",
+        "composer/semver": "^3.4",
+        "magento/magento-semver": "dev-develop#857bb36c7443e3bbdd7134459c48a46086dc90e0 as 13.0.0-beta10",
+        "symfony/console": "~7.4.0",
+        "symfony/process": "~7.4.0"
+    },
+    "require-dev": {
+        "phpunit/phpunit": "^11.5"
+    },
+    "repositories": [
+        {
+            "type": "vcs",
+            "url": "https://github.com/magento/magento-semver.git"
+        }
+    ],
+    "autoload": {
+        "psr-4": {
+            "Jbrada\\Semverdict\\": "src/"
+        }
+    },
+    "autoload-dev": {
+        "psr-4": {
+            "Jbrada\\Semverdict\\Tests\\": "tests/"
+        }
+    },
+    "bin": [
+        "bin/semverdict"
+    ],
+    "scripts": {
+        "test": "phpunit",
+        "test:unit": "phpunit --testsuite=unit"
+    },
+    "config": {
+        "sort-packages": true,
+        "allow-plugins": {
+            "laminas/laminas-dependency-plugin": true
+        }
+    }
+}

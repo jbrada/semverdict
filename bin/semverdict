@@ -1,0 +1,18 @@
+#!/usr/bin/env php
+<?php
+
+declare(strict_types=1);
+
+use Jbrada\Semverdict\Cli\AuditCommand;
+use Symfony\Component\Console\Application;
+
+foreach ([__DIR__ . '/../vendor/autoload.php', __DIR__ . '/../../../autoload.php'] as $autoload) {
+    if (file_exists($autoload)) {
+        require $autoload;
+        break;
+    }
+}
+
+$application = new Application('semverdict', '0.1.0');
+$application->add(new AuditCommand());
+$application->run();

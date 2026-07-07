@@ -1,0 +1,249 @@
+#!/usr/bin/env php
+<?php
+
+/**
+ * Worker: compares two source trees with magento-semver and prints one JSON document.
+ * Usage: analyze-pair <before-dir> <after-dir> [report-types-csv] [includes-file] [excludes-file] [policy]
+ *
+ * Policy 'magento' (default): magento-semver as-is — non-@api PHP changes dampen to PATCH.
+ * Policy 'strict': strict semver for PHP — every public signature is a contract
+ * (PHPSemVerChecker's default level mapping); magento-semver still judges the XML surfaces.
+ *
+ * Runs as a child process of MagentoSemverEngine so that magento-semver's global
+ * state mutations and potential fatals stay contained to a single comparison.
+ */
+
+declare(strict_types=1);
+
+use Magento\SemanticVersionChecker\FileChangeDetector;
+use Magento\SemanticVersionChecker\ReportBuilder;
+use Magento\SemanticVersionChecker\ReportTypes;
+use Magento\SemanticVersionChecker\SemanticVersionChecker;
+use PHPSemVerChecker\Analyzer\Analyzer;
+use PHPSemVerChecker\Scanner\Scanner;
+use PHPSemVerChecker\SemanticVersioning\Level;
+
+require __DIR__ . '/../vendor/autoload.php';
+
+error_reporting(E_ALL & ~E_DEPRECATED);
+// Stdout must stay pure JSON: magento-semver warns on standalone-module paths
+// (its scanners expect a full Magento app tree), so display errors on stderr.
+ini_set('display_errors', 'stderr');
+ini_set('memory_limit', '1G');
+
+if ($argc < 3) {
+    fwrite(STDERR, "Usage: analyze-pair <before-dir> <after-dir> [report-types-csv] [includes] [excludes]\n");
+    exit(2);
+}
+
+$beforeDir = realpath($argv[1]);
+$afterDir = realpath($argv[2]);
+$reportTypes = isset($argv[3]) && $argv[3] !== '' ? explode(',', $argv[3]) : [];
+$includesPath = $argv[4] ?? __DIR__ . '/../resources/module_includes.txt';
+$excludesPath = $argv[5] ?? __DIR__ . '/../resources/module_excludes.txt';
+$policy = $argv[6] ?? 'magento';
+
+if ($beforeDir === false || $afterDir === false) {
+    fwrite(STDERR, "Source directories do not exist.\n");
+    exit(2);
+}
+if (!in_array($policy, ['magento', 'strict'], true)) {
+    fwrite(STDERR, "Unknown policy: {$policy}\n");
+    exit(2);
+}
+
+$levelNames = [
+    Level::NONE => 'none',
+    Level::PATCH => 'patch',
+    Level::MINOR => 'minor',
+    Level::MAJOR => 'major',
+];
+
+/**
+ * Enumerates .php files under a root, relative paths as keys, honoring the
+ * exclude-pattern semantics of magento-semver's FilePatternFilter.
+ *
+ * @return array<string, string> relative path => absolute path
+ */
+function findPhpFiles(string $root, string $excludesPath): array
+{
+    $excludeSource = trim((string) file_get_contents($excludesPath));
+    $excludeRegexes = [];
+    foreach ($excludeSource === '' ? [] : explode(PHP_EOL, $excludeSource) as $pattern) {
+        $excludeRegexes[] = '#^/' . str_replace('*', '[^/]*', ltrim($pattern, '/')) . '#';
+    }
+
+    $files = [];
+    $iterator = new RecursiveIteratorIterator(
+        new RecursiveDirectoryIterator($root, FilesystemIterator::SKIP_DOTS),
+    );
+    foreach ($iterator as $file) {
+        if ($file->getExtension() !== 'php') {
+            continue;
+        }
+        $relative = substr($file->getPathname(), strlen($root));
+        foreach ($excludeRegexes as $regex) {
+            if (preg_match($regex, $relative)) {
+                continue 2;
+            }
+        }
+        $files[$relative] = $file->getPathname();
+    }
+
+    return $files;
+}
+
+/**
+ * Strict-semver PHP analysis: Magento's severity corrections applied to ALL code,
+ * without the non-@api dampening. PHPSemVerChecker's raw defaults misrate two
+ * families of changes — additions (V015 etc.) as MAJOR where semver says MINOR,
+ * and parameter typing changes (V060 etc.) as PATCH where semver says MAJOR —
+ * so we reuse the same override table magento-semver applies during its own run.
+ */
+function analyzePhpStrict(string $beforeDir, string $afterDir, string $excludesPath): \PHPSemVerChecker\Report\Report
+{
+    $registries = [];
+    foreach ([$beforeDir, $afterDir] as $dir) {
+        $scanner = new Scanner();
+        foreach (findPhpFiles($dir, $excludesPath) as $path) {
+            try {
+                $scanner->scan($path);
+            } catch (Throwable $e) {
+                fwrite(STDERR, "Skipping unparseable {$path}: {$e->getMessage()}\n");
+            }
+        }
+        $registries[] = $scanner->getRegistry();
+    }
+
+    // Report buckets are keyed by the level active at analyze() time.
+    $originalMapping = \PHPSemVerChecker\Configuration\LevelMapping::$mapping;
+    \PHPSemVerChecker\Configuration\LevelMapping::setOverrides([
+        'V015' => Level::MINOR, // Add public method
+        'V016' => Level::PATCH, // Add protected method
+        'V019' => Level::MINOR, // Add public property
+        'V020' => Level::MINOR, // Add protected property
+        'V034' => Level::MINOR, // Add public method to an interface
+        'V047' => Level::MINOR, // Add public method to trait
+        'V048' => Level::MINOR, // Add protected method to trait
+        'V057' => Level::MINOR, // Add private method to trait
+        'V059' => Level::MAJOR, // Add method parameter to private method of trait
+        'V060' => Level::MAJOR, // Public class method parameter change
+        'V063' => Level::MAJOR, // Public interface method parameter change
+        'V064' => Level::MAJOR, // Public trait method parameter change
+        'V066' => Level::MAJOR, // Private trait method parameter change
+    ]);
+    try {
+        $report = (new Analyzer())->analyze($registries[0], $registries[1]);
+
+        // Drop the V150–V160 "name case was changed" operations: under php-parser 5 the
+        // analyzer compares Identifier objects with !==, so they fire on identical names.
+        // Must happen while the overrides are active — Report::add() re-reads the mapping.
+        $filtered = new \PHPSemVerChecker\Report\Report();
+        foreach ($report as $context => $levels) {
+            foreach ($levels as $operations) {
+                foreach ($operations as $operation) {
+                    if (!preg_match('/^V15\d$|^V160$/', $operation->getCode())) {
+                        $filtered->add($context, $operation);
+                    }
+                }
+            }
+        }
+    } finally {
+        \PHPSemVerChecker\Configuration\LevelMapping::setOverrides($originalMapping);
+    }
+
+    return $filtered;
+}
+
+try {
+    if ($policy === 'strict') {
+        // magento-semver keeps the XML surfaces; PHP contexts come from the strict analyzer.
+        $xmlTypes = [
+            ReportTypes::DB_SCHEMA,
+            ReportTypes::DI_XML,
+            ReportTypes::LAYOUT_XML,
+            ReportTypes::SYSTEM_XML,
+            ReportTypes::XSD,
+            ReportTypes::LESS,
+            ReportTypes::ET_SCHEMA,
+        ];
+        $magentoTypes = $reportTypes === [] ? $xmlTypes : array_values(array_intersect($xmlTypes, $reportTypes));
+        // The strict analyzer replaces the api/all analyzers, so it only runs
+        // when the requested types cover PHP.
+        $wantsPhp = $reportTypes === [] || array_intersect([ReportTypes::API, ReportTypes::ALL], $reportTypes) !== [];
+        // Operation levels resolve lazily against the static LevelMapping, which
+        // ReportBuilder overrides and then restores — read levels only after it ran.
+        $strictReport = $wantsPhp ? analyzePhpStrict($beforeDir, $afterDir, $excludesPath) : null;
+    } else {
+        $magentoTypes = $reportTypes;
+        $strictReport = null;
+    }
+
+    // ReportBuilder treats an empty type list as "run every analyzer", so when the
+    // requested types leave nothing for magento-semver (strict policy with PHP-only
+    // types), it must not run at all — the strict analyzer already covers PHP.
+    $runMagentoChecker = $magentoTypes !== [] || $reportTypes === [] || $policy !== 'strict';
+    $level = Level::NONE;
+    $report = null;
+    if ($runMagentoChecker) {
+        $reportBuilder = new ReportBuilder($includesPath, $excludesPath, $beforeDir, $afterDir, $magentoTypes);
+        $checker = new SemanticVersionChecker($reportBuilder, new FileChangeDetector($beforeDir, $afterDir));
+
+        $level = $checker->getVersionIncrease();
+        $report = $checker->loadVersionReport();
+    }
+
+    if ($strictReport !== null) {
+        foreach ($strictReport as $contextLevels) {
+            foreach ($contextLevels as $strictLevel => $operations) {
+                if ($operations !== []) {
+                    $level = max($level, $strictLevel);
+                }
+            }
+        }
+    }
+
+    // The merged report contains the same operation in both the @api and non-API
+    // sub-reports at different severities; keep only the highest level per change.
+    $changes = [];
+    $reports = array_values(array_filter([$report, $strictReport]));
+    foreach ($reports as $sourceReport) foreach ($sourceReport as $context => $levels) {
+        foreach ($levels as $changeLevel => $operations) {
+            foreach ($operations as $operation) {
+                $location = $operation->getLocation();
+                foreach ([$beforeDir, $afterDir] as $root) {
+                    if (str_starts_with($location, $root)) {
+                        $location = substr($location, strlen($root));
+                        break;
+                    }
+                }
+                $key = $context . '|' . $location . '|' . $operation->getTarget() . '|' . $operation->getCode();
+                if (isset($changes[$key]) && $changes[$key]['_level'] >= $changeLevel) {
+                    continue;
+                }
+                $changes[$key] = [
+                    'context' => (string) $context,
+                    'level' => $levelNames[$changeLevel] ?? (string) $changeLevel,
+                    'location' => $location,
+                    'target' => $operation->getTarget(),
+                    'reason' => $operation->getReason(),
+                    'code' => $operation->getCode(),
+                    '_level' => $changeLevel,
+                ];
+            }
+        }
+    }
+    $changes = array_values(array_map(static function (array $change): array {
+        unset($change['_level']);
+
+        return $change;
+    }, $changes));
+
+    echo json_encode(
+        ['level' => $level, 'levelName' => $levelNames[$level] ?? (string) $level, 'changes' => $changes],
+        JSON_UNESCAPED_SLASHES,
+    );
+} catch (Throwable $e) {
+    fwrite(STDERR, get_class($e) . ': ' . $e->getMessage() . "\n");
+    exit(1);
+}
