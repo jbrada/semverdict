@@ -11,7 +11,7 @@
         }
     ],
     "require": {
-        "php": "^8.2",
+        "php": "^8.5",
         "ext-json": "*",
         "ext-zip": "*",
         "composer/metadata-minifier": "^1.0",
@@ -53,6 +53,10 @@
         "test:unit": "phpunit --testsuite=unit"
     },
     "config": {
+        "platform": {
+            "php": "8.5.0"
+        },
+        "platform-check": false,
         "sort-packages": true,
         "allow-plugins": {
             "laminas/laminas-dependency-plugin": true

@@ -4,7 +4,7 @@
         "Read more about it at https://getcomposer.org/doc/01-basic-usage.md#installing-dependencies",
         "This file is @generated automatically"
     ],
-    "content-hash": "e45cde5b186b6e8f3121c63c0429f002",
+    "content-hash": "aaf7d7b2a9c5adffe342cdeb8621cc9f",
     "packages": [
         {
             "name": "composer/metadata-minifier",
@@ -5225,10 +5225,13 @@
     "prefer-stable": false,
     "prefer-lowest": false,
     "platform": {
-        "php": "^8.2",
+        "php": "^8.5",
         "ext-json": "*",
         "ext-zip": "*"
     },
     "platform-dev": {},
+    "platform-overrides": {
+        "php": "8.5.0"
+    },
     "plugin-api-version": "2.6.0"
 }

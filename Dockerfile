@@ -5,7 +5,7 @@ WORKDIR /app
 COPY composer.json composer.lock ./
 RUN composer install --no-dev --prefer-dist --no-interaction --no-progress
 
-FROM php:8.4-cli-alpine
+FROM php:8.5-cli-alpine
 RUN apk add --no-cache libzip \
     && apk add --no-cache --virtual .build-deps libzip-dev \
     && docker-php-ext-install zip \

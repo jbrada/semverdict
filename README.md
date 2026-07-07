@@ -26,7 +26,9 @@ for `linux/amd64` and `linux/arm64` on every release tag (`latest`, `X.Y.Z`, `X.
 
 ### From source
 
-Requires PHP 8.2+ with the `zip` extension (Linux/macOS) and Composer.
+Requires PHP 8.4+ with the `zip` extension (Linux/macOS) and Composer — the
+project targets PHP 8.5 (the Docker image's runtime); Composer's platform
+check is disabled so 8.4 works for local development.
 `magento/magento-semver` is not published on Packagist, so the tool must be
 installed from a clone (a `composer require` into another project would not
 inherit the VCS repository entry):
@@ -127,8 +129,8 @@ composer test:unit                        # skip the slower integration tests
 
 Issues and pull requests are welcome. Please run `composer check` before
 pushing — it runs the code-style check (PHP-CS-Fixer), static analysis
-(PHPStan, level max), and the test suite, exactly what CI enforces on
-PHP 8.2–8.4 along with the Docker image build.
+(PHPStan, level max), and the test suite, exactly what CI enforces along
+with the Docker image build.
 
 ## Releasing
 
