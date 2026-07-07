@@ -7,7 +7,6 @@ namespace Jbrada\Semverdict\Cli;
 use Jbrada\Semverdict\Archive\ArchiveCache;
 use Jbrada\Semverdict\Audit\AuditOptions;
 use Jbrada\Semverdict\Audit\Auditor;
-use Jbrada\Semverdict\Engine\MagentoSemverEngine;
 use Jbrada\Semverdict\Report\ConsoleReporter;
 use Jbrada\Semverdict\Report\JsonReporter;
 use Jbrada\Semverdict\Repository\Release;
@@ -32,9 +31,6 @@ class AuditCommand extends Command
     public const EXIT_VIOLATIONS = 1;
     public const EXIT_FATAL = 2;
 
-    /** Report types understood by magento-semver's ReportBuilder. */
-    private const REPORT_TYPES = ['api', 'all', 'dbSchema', 'diXml', 'layout', 'systemXml', 'xsd', 'less', 'et_schema', 'mftf'];
-
     protected function configure(): void
     {
         $this
@@ -47,7 +43,7 @@ class AuditCommand extends Command
             ->addOption('auth', null, InputOption::VALUE_REQUIRED, 'Basic auth for --repo as user:pass')
             ->addOption('cache-dir', null, InputOption::VALUE_REQUIRED, 'Directory for downloaded releases', getcwd() . '/.semverdict-cache')
             ->addOption('report-types', null, InputOption::VALUE_REQUIRED, 'Comma-separated magento-semver report types (default: all)')
-            ->addOption('policy', null, InputOption::VALUE_REQUIRED, 'Versioning policy: "magento" (@api contract, non-API PHP dampened to patch) or "strict" (every public PHP signature is a contract)', 'magento');
+            ->addOption('policy', null, InputOption::VALUE_REQUIRED, EngineOptions::POLICY_DESCRIPTION, 'magento');
     }
 
     protected function execute(InputInterface $input, OutputInterface $output): int
@@ -63,36 +59,19 @@ class AuditCommand extends Command
         $stderr = $output instanceof ConsoleOutputInterface ? $output->getErrorOutput() : $output;
         $auth = self::stringOption($input, 'auth');
         $limit = self::stringOption($input, 'limit');
-        $reportTypesInput = self::stringOption($input, 'report-types');
-        $reportTypes = $reportTypesInput !== null
-            ? array_values(array_filter(array_map('trim', explode(',', $reportTypesInput))))
-            : [];
-        if ($unknown = array_diff($reportTypes, self::REPORT_TYPES)) {
-            $output->writeln(sprintf(
-                '<error>Unknown report type(s): %s (expected any of %s)</error>',
-                implode(', ', $unknown),
-                implode(', ', self::REPORT_TYPES),
-            ));
-
-            return self::EXIT_FATAL;
-        }
-        $policy = self::stringOption($input, 'policy') ?? 'magento';
-        if (!in_array($policy, ['magento', 'strict'], true)) {
-            $output->writeln("<error>Invalid --policy: {$policy} (expected magento or strict)</error>");
+        try {
+            $reportTypes = EngineOptions::parseReportTypes(self::stringOption($input, 'report-types'));
+            $policy = EngineOptions::validatePolicy(self::stringOption($input, 'policy') ?? 'magento');
+        } catch (\InvalidArgumentException $e) {
+            $output->writeln("<error>{$e->getMessage()}</error>");
 
             return self::EXIT_FATAL;
         }
 
-        $projectRoot = dirname(__DIR__, 2);
         $auditor = new Auditor(
             new RepositoryClient(self::stringOption($input, 'repo') ?? 'https://repo.packagist.org', $auth),
             new ArchiveCache(self::stringOption($input, 'cache-dir') ?? getcwd() . '/.semverdict-cache', $auth),
-            new MagentoSemverEngine(
-                workerPath: $projectRoot . '/bin/analyze-pair',
-                includesPath: $projectRoot . '/resources/module_includes.txt',
-                excludesPath: $projectRoot . '/resources/module_excludes.txt',
-                policy: $policy,
-            ),
+            EngineOptions::engine($policy),
         );
 
         $options = new AuditOptions(

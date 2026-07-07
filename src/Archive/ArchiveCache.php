@@ -5,6 +5,7 @@ declare(strict_types=1);
 namespace Jbrada\Semverdict\Archive;
 
 use Jbrada\Semverdict\Repository\Release;
+use Jbrada\Semverdict\Support\Dir;
 use Jbrada\Semverdict\Support\Http;
 use Jbrada\Semverdict\Support\PackageName;
 use ZipArchive;
@@ -55,7 +56,7 @@ class ArchiveCache
         }
 
         // Missing or incomplete: wipe and fetch fresh.
-        $this->removeDir($releaseDir);
+        Dir::remove($releaseDir);
         if (!mkdir($releaseDir, 0777, true) && !is_dir($releaseDir)) {
             throw new ArchiveException("Cannot create cache directory {$releaseDir}.");
         }
@@ -132,23 +133,5 @@ class ArchiveCache
         }
 
         return array_diff(scandir($dir), ['.', '..']) === [];
-    }
-
-    private function removeDir(string $dir): void
-    {
-        if (!is_dir($dir)) {
-            return;
-        }
-        $iterator = new \RecursiveIteratorIterator(
-            new \RecursiveDirectoryIterator($dir, \FilesystemIterator::SKIP_DOTS),
-            \RecursiveIteratorIterator::CHILD_FIRST,
-        );
-        foreach ($iterator as $item) {
-            if (!$item instanceof \SplFileInfo) {
-                continue;
-            }
-            $item->isDir() && !$item->isLink() ? rmdir($item->getPathname()) : unlink($item->getPathname());
-        }
-        rmdir($dir);
     }
 }

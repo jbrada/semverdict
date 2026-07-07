@@ -6,10 +6,13 @@ COPY composer.json composer.lock ./
 RUN composer install --no-dev --prefer-dist --no-interaction --no-progress
 
 FROM php:8.5-cli-alpine
-RUN apk add --no-cache libzip \
+RUN apk add --no-cache libzip git \
     && apk add --no-cache --virtual .build-deps libzip-dev \
     && docker-php-ext-install zip \
     && apk del .build-deps
+# The `next` command reads a bind-mounted working copy, which is owned by the
+# host user rather than the container's root — git refuses that by default.
+RUN git config --system --add safe.directory '*'
 
 WORKDIR /app
 COPY --from=vendor /app/vendor ./vendor

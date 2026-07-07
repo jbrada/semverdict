@@ -10,6 +10,9 @@ Use it as a quality signal before adopting a module: a vendor that repeatedly sh
 BC breaks as patch releases will break your `composer update`. The exit code and
 `--json` output make it easy to wire into CI or scoring pipelines.
 
+It also works the other way around: point `semverdict next` at your own working
+copy and it tells you which tag your unreleased changes require — and why.
+
 ## Installation
 
 ### Docker (preferred)
@@ -86,6 +89,49 @@ Example output:
 
 Exit codes: `0` compliant, `1` violations found, `2` fatal (package not found, fewer than
 2 auditable releases). Re-runs are near-instant thanks to the archive cache.
+
+## Suggesting the next tag (`next`)
+
+Before tagging a release, run `next` against the package's working copy: it finds the
+highest stable semver tag, exports that tag's tree with `git archive`, compares it
+against the current working tree (tracked files with uncommitted edits, plus
+untracked-but-not-ignored files — `vendor/` and other ignored paths never pollute the
+comparison), and prints the tag the changes require:
+
+```bash
+bin/semverdict next                                # current directory
+bin/semverdict next path/to/module --policy=strict
+bin/semverdict next --json | jq -r .suggestedTag
+docker run --rm -v "$PWD:/audit" jbrada/semverdict next
+```
+
+Example output:
+
+```
+Baseline: v1.2.0
+Required bump: MINOR
+
+  MINOR class  /src/Api/GreeterInterface.php Acme\Api\GreeterInterface::wave — [public] Method has been added (V034)
+
+Suggested next tag: v1.3.0
+```
+
+The suggestion follows the baseline's style (`v` prefix kept, `1.2` → `1.2.1`) and a few
+conventions, each spelled out in the output when it applies: a break below 1.0.0 bumps
+the 0.x minor (with a nudge toward 1.0.0 if the API is ready), and a pre-release
+baseline promotes to its stable triple, since semver allows any change before the
+stable ships. Monorepos work too — point it at the package subdirectory and only that
+subtree is compared.
+
+| Option | Description |
+| --- | --- |
+| `--tag=X` | Compare against this tag instead of the highest stable semver tag. |
+| `--include-prereleases` | Allow a pre-release tag (e.g. `v1.3.0-beta1`) as the baseline. |
+| `--json` | Machine-readable JSON on stdout (`baselineTag`, `requiredLevel`, `suggestedTag`, `notes`, `changes`). |
+| `--report-types`, `--policy`, `-v` | Same as `audit`. |
+
+Exit codes: `0` analysis succeeded (including "no release needed"), `2` fatal (not a git
+work tree, no semver tags to compare against, analysis failed).
 
 ## How it works
 
