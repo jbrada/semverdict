@@ -115,7 +115,7 @@ class AuditProjectCommand extends Command
             // reported as such instead of being masked by the next candidate's
             // "not found".
             $servedBy = null;
-            $firstError = null;
+            $attempts = [];
             foreach ($candidates as $repo) {
                 try {
                     $clientFor($repo)->getReleases($package);
@@ -123,7 +123,7 @@ class AuditProjectCommand extends Command
                     $vendorRepoHint[$vendor] = $repo;
                     break;
                 } catch (RepositoryException $e) {
-                    $firstError ??= $e->getMessage();
+                    $attempts[] = ['repo' => $repo, 'error' => $e->getMessage()];
                 }
             }
 
@@ -132,7 +132,14 @@ class AuditProjectCommand extends Command
             if ($servedBy === null) {
                 $error = str_ends_with($package, '-implementation')
                     ? 'virtual package — provided by an implementation, has no releases of its own'
-                    : 'not found in any configured repository (' . ($firstError ?? 'no repositories configured') . ')';
+                    : sprintf(
+                        'not served by any of the %d configured repositories (%s)',
+                        count($attempts),
+                        implode(', ', array_map(
+                            static fn (array $attempt): string => (string) (parse_url($attempt['repo'], PHP_URL_HOST) ?: $attempt['repo']),
+                            $attempts,
+                        )),
+                    );
             } else {
                 try {
                     $report = $auditorFor($servedBy)->audit($package, $options, $progress);
@@ -146,6 +153,7 @@ class AuditProjectCommand extends Command
                 'repo' => $servedBy,
                 'report' => $report,
                 'error' => $error,
+                'attempts' => $attempts,
             ];
         }
 
@@ -171,7 +179,7 @@ class AuditProjectCommand extends Command
     }
 
     /**
-     * @param list<array{package: string, repo: ?string, report: ?AuditReport, error: ?string}> $rows
+     * @param list<array{package: string, repo: ?string, report: ?AuditReport, error: ?string, attempts: list<array{repo: string, error: string}>}> $rows
      */
     private function reportTable(array $rows, OutputInterface $output): void
     {
@@ -205,7 +213,7 @@ class AuditProjectCommand extends Command
     }
 
     /**
-     * @param list<array{package: string, repo: ?string, report: ?AuditReport, error: ?string}> $rows
+     * @param list<array{package: string, repo: ?string, report: ?AuditReport, error: ?string, attempts: list<array{repo: string, error: string}>}> $rows
      */
     private function reportJson(string $projectDir, array $rows, OutputInterface $output): void
     {
@@ -215,7 +223,13 @@ class AuditProjectCommand extends Command
             $report = $row['report'];
             if ($report === null) {
                 ++$unresolved;
-                $packages[] = ['package' => $row['package'], 'error' => $row['error']];
+                $packages[] = [
+                    'package' => $row['package'],
+                    'repo' => $row['repo'],
+                    'error' => $row['error'],
+                    // Per-repository detail: which lookups were tried and how each failed.
+                    'attempts' => $row['attempts'],
+                ];
                 continue;
             }
             $report->followsSemver() ? $compliant++ : $violations++;
