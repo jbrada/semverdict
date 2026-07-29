@@ -12,12 +12,28 @@ use Jbrada\Semverdict\Support\PackageName;
 
 class RepositoryClient
 {
-    /** @var callable(string, ?string): string */
+    /** @var callable(string, ?string, ?int): string */
     private $httpGet;
+
+    /**
+     * A v1 repository index is a single file listing the whole repository. For
+     * a vendor repository that is well under a megabyte; for a public
+     * repository it can be hundreds of megabytes, so refuse anything of that
+     * order instead of reading it into memory.
+     */
+    private const MAX_INDEX_BYTES = 33_554_432; // 32 MiB
 
     /** @var array<string, Release[]> */
     private array $releaseCache = [];
 
+    /** @var array<string, mixed>|null the memoized v1 index */
+    private ?array $v1Index = null;
+
+    private bool $v1Unavailable = false;
+
+    /**
+     * @param (callable(string, ?string, ?int): string)|null $httpGet
+     */
     public function __construct(
         private readonly string $repoBaseUrl = 'https://repo.packagist.org',
         private readonly ?string $basicAuth = null,
@@ -31,8 +47,8 @@ class RepositoryClient
      * deduplicated by normalized version.
      *
      * Tries the Composer v2 metadata endpoint first, then falls back to a v1
-     * `packages.json` — several Magento vendor repositories (Amasty, BSS
-     * Commerce) still only speak v1.
+     * `packages.json` — several Magento vendor repositories still only speak
+     * v1.
      *
      * @return Release[]
      */
@@ -87,7 +103,7 @@ class RepositoryClient
     private function releasesFromV1(string $packageName): array
     {
         $base = rtrim($this->repoBaseUrl, '/');
-        $root = $this->fetchJson($base . '/packages.json', 'repository index');
+        $root = $this->v1Index($base);
 
         $versions = $this->findPackageInV1($root, $packageName);
 
@@ -159,12 +175,36 @@ class RepositoryClient
     }
 
     /**
+     * The repository index is fetched at most once per repository: it is the
+     * same file for every package, and for a v2-only repository (Packagist)
+     * the attempt must not be repeated for each missing package.
+     *
      * @return array<string, mixed>
      */
-    private function fetchJson(string $url, string $what): array
+    private function v1Index(string $base): array
+    {
+        if ($this->v1Unavailable) {
+            throw new RepositoryException("No usable v1 index at {$base}.");
+        }
+        if ($this->v1Index !== null) {
+            return $this->v1Index;
+        }
+
+        try {
+            return $this->v1Index = $this->fetchJson($base . '/packages.json', 'repository index', self::MAX_INDEX_BYTES);
+        } catch (RepositoryException $e) {
+            $this->v1Unavailable = true;
+            throw $e;
+        }
+    }
+
+    /**
+     * @return array<string, mixed>
+     */
+    private function fetchJson(string $url, string $what, ?int $maxBytes = null): array
     {
         try {
-            $body = ($this->httpGet)($url, $this->basicAuth);
+            $body = ($this->httpGet)($url, $this->basicAuth, $maxBytes);
         } catch (\RuntimeException $e) {
             throw new RepositoryException("Cannot fetch {$what}: {$e->getMessage()}", previous: $e);
         }

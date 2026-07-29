@@ -12,24 +12,50 @@ class Http
     private const TIMEOUT_SECONDS = 60;
 
     /**
-     * Some Magento vendor repositories (Amasty, for one) reject requests whose
-     * User-Agent does not look like Composer — they answer 401 "composer
-     * http-basic authentication required" even when the credentials are valid.
-     * So identify as a Composer client while still naming the actual tool.
+     * Some Magento vendor repositories reject requests whose User-Agent does
+     * not look like Composer — they answer 401 "composer http-basic
+     * authentication required" even when the credentials are valid. So
+     * identify as a Composer client while still naming the actual tool.
      */
     private const USER_AGENT = 'Composer/2.8.0 (semverdict; +https://github.com/jbrada/semverdict)';
 
     /**
-     * @throws RuntimeException on any HTTP or transport failure
+     * @param int|null $maxBytes refuse bodies larger than this instead of
+     *                           buffering them (Packagist's root index is
+     *                           hundreds of megabytes — reading it would
+     *                           exhaust memory)
+     *
+     * @throws RuntimeException on any HTTP or transport failure, or when the
+     *                          body exceeds $maxBytes
      */
-    public static function get(string $url, ?string $basicAuth = null): string
+    public static function get(string $url, ?string $basicAuth = null, ?int $maxBytes = null): string
     {
         [$stream] = self::open($url, $basicAuth);
-        $body = stream_get_contents($stream);
-        fclose($stream);
-        if ($body === false) {
-            throw new RuntimeException("Reading response body failed for {$url}.");
+
+        if ($maxBytes === null) {
+            $body = stream_get_contents($stream);
+            fclose($stream);
+            if ($body === false) {
+                throw new RuntimeException("Reading response body failed for {$url}.");
+            }
+
+            return $body;
         }
+
+        $body = '';
+        while (!feof($stream)) {
+            $chunk = fread($stream, 1 << 16);
+            if ($chunk === false) {
+                fclose($stream);
+                throw new RuntimeException("Reading response body failed for {$url}.");
+            }
+            $body .= $chunk;
+            if (strlen($body) > $maxBytes) {
+                fclose($stream);
+                throw new RuntimeException(sprintf('Response from %s exceeds the %d byte limit.', $url, $maxBytes));
+            }
+        }
+        fclose($stream);
 
         return $body;
     }

@@ -24,6 +24,9 @@ docker run --rm jbrada/semverdict audit vendor/module
 Optional: add `-v "$PWD/.semverdict-cache:/audit/.semverdict-cache"` to keep the
 release archive cache on the host — re-runs then skip all downloads.
 
+The image runs PHP with a 1 GB memory limit; raise it with
+`-e PHP_MEMORY_LIMIT=2G` if a particularly large package needs more.
+
 Images are published to [Docker Hub](https://hub.docker.com/r/jbrada/semverdict)
 for `linux/amd64` and `linux/arm64` on every release tag (`latest`, `X.Y.Z`, `X.Y`).
 
@@ -108,18 +111,23 @@ For each direct `require` in the project's `composer.json` (platform packages an
 repository is resolved the way Composer would: the project's configured
 `composer`-type repositories are tried in declared order, then Packagist (unless
 the project disables it), with credentials looked up per host from the project's
-`auth.json` or the `COMPOSER_AUTH` environment variable. Amasty, repo.magento.com
-and other private repositories therefore work without any flags.
+`auth.json` or the `COMPOSER_AUTH` environment variable. Paid vendor repositories,
+repo.magento.com and other private repositories therefore work without any flags —
+including the ones that only speak the Composer v1 protocol.
 
 ```
-+---------------------------+------------------+-------+------------+----------------------+
-| Package                   | Verdict          | Pairs | Violations | Source               |
-+---------------------------+------------------+-------+------------+----------------------+
-| amasty/preorder           | ✘ violations     | 10    | 2          | composer.amasty.com  |
-| cweagans/composer-patches | ✔ follows semver | 10    | 0          | repo.packagist.org   |
-| psr/log                   | — unresolved     |       |            | Cannot fetch metadata…|
-+---------------------------+------------------+-------+------------+----------------------+
++----------------------------+------------------+-------+------------+--------------------------+
+| Package                    | Verdict          | Pairs | Violations | Source                   |
++----------------------------+------------------+-------+------------+--------------------------+
+| acme/paid-module           | ✘ violations     | 10    | 2          | composer.vendor.example  |
+| cweagans/composer-patches  | ✔ follows semver | 10    | 0          | repo.packagist.org       |
+| psr/http-client-implementation | — not audited |      |            | virtual package — …      |
++----------------------------+------------------+-------+------------+--------------------------+
 ```
+
+Rows that cannot be audited say why: a virtual `*-implementation` package has no
+releases of its own, a package with a single release has nothing to compare, and a
+package none of the configured repositories serve reports the first repository error.
 
 `audit-project` accepts the same `--strict`, `--include-prereleases`, `--limit`
 (default 10 per package), `--cache-dir`, `--report-types`, `--policy` and `--json`

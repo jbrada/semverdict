@@ -55,14 +55,21 @@ class ArchiveCache
             }
         }
 
-        // Missing or incomplete: wipe and fetch fresh.
-        Dir::remove($releaseDir);
-        if (!mkdir($releaseDir, 0777, true) && !is_dir($releaseDir)) {
+        // Missing or incomplete: wipe and fetch fresh. An interrupted earlier
+        // run can leave a partial extraction behind, so a failed removal is an
+        // error worth reporting rather than something to extract on top of.
+        if (!Dir::remove($releaseDir)) {
+            throw new ArchiveException("Cannot clear stale cache directory {$releaseDir}.");
+        }
+        if (!$this->makeDir($releaseDir)) {
             throw new ArchiveException("Cannot create cache directory {$releaseDir}.");
         }
 
         $zipPath = $releaseDir . '/dist.zip';
         $extractDir = $releaseDir . '/src';
+        // Extract to a scratch directory and move it into place only once it is
+        // complete, so an interruption never leaves a half-extracted "src".
+        $stagingDir = $releaseDir . '/.staging';
 
         try {
             ($this->httpDownload)($release->distUrl, $zipPath, $this->basicAuth);
@@ -74,16 +81,23 @@ class ArchiveCache
         if ($zip->open($zipPath) !== true) {
             throw new ArchiveException("Cannot open zip archive for {$release->version}.");
         }
-        if (!mkdir($extractDir, 0777, true) && !is_dir($extractDir)) {
+        if (!$this->makeDir($stagingDir)) {
             $zip->close();
-            throw new ArchiveException("Cannot create extraction directory {$extractDir}.");
+            throw new ArchiveException("Cannot create extraction directory {$stagingDir}.");
         }
-        if (!$zip->extractTo($extractDir)) {
+        if (!$zip->extractTo($stagingDir)) {
             $zip->close();
+            Dir::remove($stagingDir);
             throw new ArchiveException("Cannot extract zip archive for {$release->version}.");
         }
         $zip->close();
-        unlink($zipPath);
+        if (is_file($zipPath)) {
+            @unlink($zipPath);
+        }
+        if (!@rename($stagingDir, $extractDir)) {
+            Dir::remove($stagingDir);
+            throw new ArchiveException("Cannot finalize extraction directory {$extractDir}.");
+        }
 
         $relativeRoot = 'src' . $this->detectSingleRootSuffix($extractDir);
         $root = $releaseDir . '/' . $relativeRoot;
@@ -96,6 +110,11 @@ class ArchiveCache
         }
 
         return $root;
+    }
+
+    private function makeDir(string $dir): bool
+    {
+        return is_dir($dir) || @mkdir($dir, 0777, true) || is_dir($dir);
     }
 
     /**

@@ -43,7 +43,7 @@ class AuditProjectCommand extends Command
             ->addOption('limit', null, InputOption::VALUE_REQUIRED, 'Audit only the N most recent version pairs per package', '10')
             ->addOption('cache-dir', null, InputOption::VALUE_REQUIRED, 'Directory for downloaded releases', getcwd() . '/.semverdict-cache')
             ->addOption('report-types', null, InputOption::VALUE_REQUIRED, 'Comma-separated magento-semver report types (default: all)')
-            ->addOption('policy', null, InputOption::VALUE_REQUIRED, EngineOptions::POLICY_DESCRIPTION, 'magento');
+            ->addOption('policy', null, InputOption::VALUE_REQUIRED, EngineOptions::POLICY_DESCRIPTION, EngineOptions::DEFAULT_POLICY);
     }
 
     protected function execute(InputInterface $input, OutputInterface $output): int
@@ -54,7 +54,7 @@ class AuditProjectCommand extends Command
         try {
             $project = new ComposerProject(is_string($projectArg) ? $projectArg : '.');
             $reportTypes = EngineOptions::parseReportTypes(self::stringOption($input, 'report-types'));
-            $policy = EngineOptions::validatePolicy(self::stringOption($input, 'policy') ?? 'magento');
+            $policy = EngineOptions::validatePolicy(self::stringOption($input, 'policy') ?? EngineOptions::DEFAULT_POLICY);
         } catch (ProjectException|\InvalidArgumentException $e) {
             $output->writeln("<error>{$e->getMessage()}</error>");
 

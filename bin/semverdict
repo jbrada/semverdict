@@ -15,7 +15,7 @@ foreach ([__DIR__ . '/../vendor/autoload.php', __DIR__ . '/../../../autoload.php
     }
 }
 
-$application = new Application('semverdict', '0.0.4');
+$application = new Application('semverdict', '0.0.5');
 $application->add(new AuditCommand());
 $application->add(new AuditProjectCommand());
 $application->add(new NextCommand());

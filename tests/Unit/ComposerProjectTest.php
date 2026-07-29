@@ -37,13 +37,13 @@ class ComposerProjectTest extends TestCase
                 'php' => '~8.3.0',
                 'ext-intl' => '*',
                 'magento/product-community-edition' => '2.4.8-p3',
-                'amasty/preorder' => '^2.0',
+                'acme/paid-module' => '^2.0',
                 'Deployer/Deployer' => '^7.0',
             ],
         ]);
         $project = new ComposerProject($this->dir);
 
-        self::assertSame(['amasty/preorder', 'deployer/deployer'], $project->directRequires());
+        self::assertSame(['acme/paid-module', 'deployer/deployer'], $project->directRequires());
         self::assertContains('magento/product-community-edition', $project->directRequires(includeMagento: true));
     }
 
@@ -51,14 +51,14 @@ class ComposerProjectTest extends TestCase
     {
         $this->writeComposerJson([
             'repositories' => [
-                ['type' => 'composer', 'url' => 'https://composer.amasty.com/community/'],
+                ['type' => 'composer', 'url' => 'https://composer.vendor.example/community/'],
                 ['type' => 'composer', 'url' => 'https://repo.magento.com'],
                 ['type' => 'vcs', 'url' => 'https://github.com/foo/bar'],
             ],
         ]);
 
         self::assertSame([
-            'https://composer.amasty.com/community',
+            'https://composer.vendor.example/community',
             'https://repo.magento.com',
             ComposerProject::PACKAGIST,
         ], (new ComposerProject($this->dir))->repositories());
@@ -68,13 +68,13 @@ class ComposerProjectTest extends TestCase
     {
         $this->writeComposerJson([
             'repositories' => [
-                'amasty' => ['type' => 'composer', 'url' => 'https://composer.amasty.com/enterprise'],
+                'vendor' => ['type' => 'composer', 'url' => 'https://composer.vendor.example/enterprise'],
                 'packagist.org' => false,
             ],
         ]);
 
         self::assertSame(
-            ['https://composer.amasty.com/enterprise'],
+            ['https://composer.vendor.example/enterprise'],
             (new ComposerProject($this->dir))->repositories(),
         );
     }
@@ -84,12 +84,12 @@ class ComposerProjectTest extends TestCase
         $this->writeComposerJson([]);
         file_put_contents($this->dir . '/auth.json', (string) json_encode([
             'http-basic' => [
-                'composer.amasty.com' => ['username' => 'u', 'password' => 'p'],
+                'composer.vendor.example' => ['username' => 'u', 'password' => 'p'],
             ],
         ]));
         $project = new ComposerProject($this->dir);
 
-        self::assertSame('u:p', $project->authFor('https://composer.amasty.com/enterprise'));
+        self::assertSame('u:p', $project->authFor('https://composer.vendor.example/enterprise'));
         self::assertNull($project->authFor('https://repo.magento.com'));
     }
 

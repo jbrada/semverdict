@@ -15,7 +15,11 @@ final class EngineOptions
     /** Report types understood by magento-semver's ReportBuilder. */
     public const REPORT_TYPES = ['api', 'all', 'dbSchema', 'diXml', 'layout', 'systemXml', 'xsd', 'less', 'et_schema', 'mftf'];
 
-    public const POLICY_DESCRIPTION = 'Versioning policy: "magento" (@api contract, non-API PHP dampened to patch) or "strict" (every public PHP signature is a contract)';
+    public const POLICIES = ['magento', 'strict'];
+
+    public const DEFAULT_POLICY = 'magento';
+
+    public const POLICY_DESCRIPTION = 'Versioning policy: "magento" (default — @api contract, non-API PHP dampened to patch) or "strict" (every public PHP signature is a contract)';
 
     /**
      * @return list<string>
@@ -39,8 +43,8 @@ final class EngineOptions
      */
     public static function validatePolicy(string $policy): string
     {
-        if (!in_array($policy, ['magento', 'strict'], true)) {
-            throw new \InvalidArgumentException("Invalid --policy: {$policy} (expected magento or strict)");
+        if (!in_array($policy, self::POLICIES, true)) {
+            throw new \InvalidArgumentException("Invalid --policy: {$policy} (expected " . implode(' or ', self::POLICIES) . ')');
         }
 
         return $policy;

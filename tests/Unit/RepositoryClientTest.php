@@ -113,7 +113,7 @@ class RepositoryClientTest extends TestCase
 
     public function testFallsBackToV1PackagesJsonWhenV2IsUnavailable(): void
     {
-        // Amasty and BSS Commerce serve v1 only: /p2/ 403s and packages.json
+        // Some vendor repositories serve v1 only: /p2/ 403s and packages.json
         // carries the definitions inline, without version_normalized.
         $requested = [];
         $client = new RepositoryClient(
