@@ -219,10 +219,16 @@ with the Docker image build.
 
 ## Releasing
 
-Pushing a `vX.Y.Z` git tag runs the test suite and, when green, builds and
-pushes `jbrada/semverdict:X.Y.Z`, `:X.Y`, and `:latest` (multi-arch) to Docker
-Hub. The repository needs `DOCKERHUB_USERNAME` and `DOCKERHUB_TOKEN` action
-secrets.
+Pushing a `vX.Y.Z` git tag triggers `release.yml`, which runs the test suite and,
+when green, builds and pushes `jbrada/semverdict:X.Y.Z`, `:X.Y`, and `:latest`
+(multi-arch) to Docker Hub. The repository needs `DOCKERHUB_USERNAME` and
+`DOCKERHUB_TOKEN` action secrets.
+
+Releases are built entirely cache-free and in a workflow separate from `ci.yml`
+(which caches but publishes nothing), so no cache entry can ever influence a
+published artifact — see the `cache-poisoning` audit in
+[zizmor](https://docs.zizmor.sh), which runs over these workflows in
+`pedantic` mode on every change under `.github/`.
 
 ## License
 
