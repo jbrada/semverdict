@@ -6,8 +6,8 @@ namespace Jbrada\Semverdict\Cli;
 
 use Jbrada\Semverdict\Archive\ArchiveCache;
 use Jbrada\Semverdict\Audit\AuditOptions;
-use Jbrada\Semverdict\Audit\AuditReport;
 use Jbrada\Semverdict\Audit\Auditor;
+use Jbrada\Semverdict\Audit\AuditReport;
 use Jbrada\Semverdict\Project\ComposerProject;
 use Jbrada\Semverdict\Project\ProjectException;
 use Jbrada\Semverdict\Repository\Release;
@@ -55,7 +55,7 @@ class AuditProjectCommand extends Command
             $project = new ComposerProject(is_string($projectArg) ? $projectArg : '.');
             $reportTypes = EngineOptions::parseReportTypes(self::stringOption($input, 'report-types'));
             $policy = EngineOptions::validatePolicy(self::stringOption($input, 'policy') ?? 'magento');
-        } catch (ProjectException | \InvalidArgumentException $e) {
+        } catch (ProjectException|\InvalidArgumentException $e) {
             $output->writeln("<error>{$e->getMessage()}</error>");
 
             return self::EXIT_FATAL;
@@ -187,7 +187,7 @@ class AuditProjectCommand extends Command
         foreach ($rows as $row) {
             $report = $row['report'];
             if ($report === null) {
-                $unresolved++;
+                ++$unresolved;
                 $packages[] = ['package' => $row['package'], 'error' => $row['error']];
                 continue;
             }
