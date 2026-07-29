@@ -78,18 +78,19 @@ class AuditProjectCommand extends Command
         );
 
         $cacheDir = self::stringOption($input, 'cache-dir') ?? getcwd() . '/.semverdict-cache';
+        $clients = [];
         $auditors = [];
-        $auditorFor = function (string $repo) use (&$auditors, $project, $cacheDir, $policy): Auditor {
-            if (!isset($auditors[$repo])) {
-                $auth = $project->authFor($repo);
-                $auditors[$repo] = new Auditor(
-                    new RepositoryClient($repo, $auth),
-                    new ArchiveCache($cacheDir, $auth),
-                    EngineOptions::engine($policy),
-                );
-            }
-
-            return $auditors[$repo];
+        $clientFor = function (string $repo) use (&$clients, $project): RepositoryClient {
+            return $clients[$repo] ??= new RepositoryClient($repo, $project->authFor($repo));
+        };
+        // The Auditor shares the repo's client, whose metadata lookups are
+        // memoized — resolving the serving repository costs no extra request.
+        $auditorFor = function (string $repo) use (&$auditors, $clientFor, $project, $cacheDir, $policy): Auditor {
+            return $auditors[$repo] ??= new Auditor(
+                $clientFor($repo),
+                new ArchiveCache($cacheDir, $project->authFor($repo)),
+                EngineOptions::engine($policy),
+            );
         };
 
         $progress = function (int $current, int $total, Release $from, Release $to) use ($stderr): void {
@@ -109,17 +110,34 @@ class AuditProjectCommand extends Command
                 $candidates = array_values(array_unique(array_merge([$vendorRepoHint[$vendor]], $repos)));
             }
 
-            $report = null;
+            // Resolve which repository actually serves the package first, so a
+            // package-specific problem (e.g. too few releases to compare) is
+            // reported as such instead of being masked by the next candidate's
+            // "not found".
             $servedBy = null;
-            $lastError = null;
+            $firstError = null;
             foreach ($candidates as $repo) {
                 try {
-                    $report = $auditorFor($repo)->audit($package, $options, $progress);
+                    $clientFor($repo)->getReleases($package);
                     $servedBy = $repo;
                     $vendorRepoHint[$vendor] = $repo;
                     break;
                 } catch (RepositoryException $e) {
-                    $lastError = $e->getMessage();
+                    $firstError ??= $e->getMessage();
+                }
+            }
+
+            $report = null;
+            $error = null;
+            if ($servedBy === null) {
+                $error = str_ends_with($package, '-implementation')
+                    ? 'virtual package — provided by an implementation, has no releases of its own'
+                    : 'not found in any configured repository (' . ($firstError ?? 'no repositories configured') . ')';
+            } else {
+                try {
+                    $report = $auditorFor($servedBy)->audit($package, $options, $progress);
+                } catch (RepositoryException $e) {
+                    $error = $e->getMessage();
                 }
             }
 
@@ -127,7 +145,7 @@ class AuditProjectCommand extends Command
                 'package' => $package,
                 'repo' => $servedBy,
                 'report' => $report,
-                'error' => $report === null ? $lastError : null,
+                'error' => $error,
             ];
         }
 
@@ -162,7 +180,16 @@ class AuditProjectCommand extends Command
         foreach ($rows as $row) {
             $report = $row['report'];
             if ($report === null) {
-                $table->addRow([$row['package'], '<comment>— unresolved</comment>', '', '', $this->shortError($row['error'])]);
+                $source = $row['repo'] !== null
+                    ? (parse_url($row['repo'], PHP_URL_HOST) ?: $row['repo'])
+                    : '';
+                $table->addRow([
+                    $row['package'],
+                    '<comment>— not audited</comment>',
+                    '',
+                    '',
+                    trim($source . ' ' . $this->shortError($row['error'])),
+                ]);
                 continue;
             }
             $summary = $report->summary();
@@ -219,7 +246,7 @@ class AuditProjectCommand extends Command
         }
         $firstLine = strtok($error, "\n");
 
-        return strlen((string) $firstLine) > 60 ? substr((string) $firstLine, 0, 57) . '…' : (string) $firstLine;
+        return strlen((string) $firstLine) > 70 ? substr((string) $firstLine, 0, 67) . '…' : (string) $firstLine;
     }
 
     private static function stringOption(InputInterface $input, string $name): ?string

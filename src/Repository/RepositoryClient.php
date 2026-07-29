@@ -15,6 +15,9 @@ class RepositoryClient
     /** @var callable(string, ?string): string */
     private $httpGet;
 
+    /** @var array<string, Release[]> */
+    private array $releaseCache = [];
+
     public function __construct(
         private readonly string $repoBaseUrl = 'https://repo.packagist.org',
         private readonly ?string $basicAuth = null,
@@ -38,18 +41,23 @@ class RepositoryClient
         if (!PackageName::isValid($packageName)) {
             throw new RepositoryException("Invalid package name: {$packageName}");
         }
+        if (isset($this->releaseCache[$packageName])) {
+            return $this->releaseCache[$packageName];
+        }
 
         try {
-            return $this->releasesFromV2($packageName);
+            $releases = $this->releasesFromV2($packageName);
         } catch (RepositoryException $v2Error) {
             try {
-                return $this->releasesFromV1($packageName);
+                $releases = $this->releasesFromV1($packageName);
             } catch (RepositoryException) {
                 // The v2 error is the more informative one (it names the
                 // package endpoint and carries the HTTP status).
                 throw $v2Error;
             }
         }
+
+        return $this->releaseCache[$packageName] = $releases;
     }
 
     /**
