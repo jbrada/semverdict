@@ -1,17 +1,19 @@
-name: CI
+name: Release
 
 on:
   push:
-    branches: [main]
-  pull_request:
+    tags: ['v*']
 
 concurrency:
   group: ${{ github.workflow }}-${{ github.ref }}
-  cancel-in-progress: true
+  # Never cancel a release: a half-published image is worse than a slow one.
+  cancel-in-progress: false
 
 permissions:
   contents: read
 
+# Deliberately cache-free: everything a published image is built from is fetched
+# fresh, so a poisoned cache entry can never end up inside a release artifact.
 jobs:
   checks:
     name: Static checks and tests
@@ -29,25 +31,14 @@ jobs:
           extensions: json, zip
           coverage: none
 
-      - name: Get composer cache directory
-        id: composer-cache
-        run: echo "dir=$(composer config cache-files-dir)" >> "$GITHUB_OUTPUT"
-
-      - name: Restore composer cache
-        uses: actions/cache@55cc8345863c7cc4c66a329aec7e433d2d1c52a9 # v6.1.0
-        with:
-          path: ${{ steps.composer-cache.outputs.dir }}
-          key: composer-${{ hashFiles('composer.lock') }}
-          restore-keys: composer-
-
       - name: Install dependencies
         run: composer install --prefer-dist --no-progress --no-interaction
 
       - name: Code style, PHPStan (level max), tests
         run: composer check
 
-  docker:
-    name: Build image as a smoke test
+  publish:
+    name: Build and publish Docker image
     runs-on: ubuntu-latest
     needs: checks
     steps:
@@ -56,20 +47,33 @@ jobs:
         with:
           persist-credentials: false
 
+      - name: Set up QEMU
+        uses: docker/setup-qemu-action@96fe6ef7f33517b61c61be40b68a1882f3264fb8 # v4.2.0
+
       - name: Set up Buildx
         uses: docker/setup-buildx-action@bb05f3f5519dd87d3ba754cc423b652a5edd6d2c # v4.2.0
 
-      # Nothing is published here — releases are built from scratch in release.yml.
-      - name: Build (amd64, no push)
+      - name: Docker meta
+        id: meta
+        uses: docker/metadata-action@dc802804100637a589fabce1cb79ff13a1411302 # v6.2.0
+        with:
+          images: jbrada/semverdict
+          tags: |
+            type=semver,pattern={{version}}
+            type=semver,pattern={{major}}.{{minor}}
+            type=raw,value=latest
+
+      - name: Login to Docker Hub
+        uses: docker/login-action@dbcb813823bdd20940b903addbd779551569679f # v4.6.0
+        with:
+          username: ${{ secrets.DOCKERHUB_USERNAME }}
+          password: ${{ secrets.DOCKERHUB_TOKEN }}
+
+      - name: Build and push (multi-arch)
         uses: docker/build-push-action@53b7df96c91f9c12dcc8a07bcb9ccacbed38856a # v7.3.0
         with:
           context: .
-          platforms: linux/amd64
-          push: false
-          load: true
-          tags: jbrada/semverdict:ci
-          cache-from: type=gha
-          cache-to: type=gha,mode=max
-
-      - name: Smoke test image
-        run: docker run --rm jbrada/semverdict:ci list
+          platforms: linux/amd64,linux/arm64
+          push: true
+          tags: ${{ steps.meta.outputs.tags }}
+          labels: ${{ steps.meta.outputs.labels }}
