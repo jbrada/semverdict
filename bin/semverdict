@@ -4,6 +4,7 @@
 declare(strict_types=1);
 
 use Jbrada\Semverdict\Cli\AuditCommand;
+use Jbrada\Semverdict\Cli\AuditProjectCommand;
 use Jbrada\Semverdict\Cli\NextCommand;
 use Symfony\Component\Console\Application;
 
@@ -16,5 +17,6 @@ foreach ([__DIR__ . '/../vendor/autoload.php', __DIR__ . '/../../../autoload.php
 
 $application = new Application('semverdict', '0.0.2');
 $application->add(new AuditCommand());
+$application->add(new AuditProjectCommand());
 $application->add(new NextCommand());
 $application->run();

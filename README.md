@@ -90,6 +90,45 @@ Example output:
 Exit codes: `0` compliant, `1` violations found, `2` fatal (package not found, fewer than
 2 auditable releases). Re-runs are near-instant thanks to the archive cache.
 
+## Auditing a whole project (`audit-project`)
+
+Audits every first-party dependency of a Composer project in one go — including
+packages from private repositories:
+
+```bash
+bin/semverdict audit-project /path/to/store
+# or in Docker (mount the project read-only):
+docker run --rm -v /path/to/store:/project:ro \
+  -v "$PWD/.semverdict-cache:/audit/.semverdict-cache" \
+  jbrada/semverdict audit-project /project
+```
+
+For each direct `require` in the project's `composer.json` (platform packages and
+`magento/*` skipped — pass `--include-magento` to audit those too), the package's
+repository is resolved the way Composer would: the project's configured
+`composer`-type repositories are tried in declared order, then Packagist (unless
+the project disables it), with credentials looked up per host from the project's
+`auth.json` or the `COMPOSER_AUTH` environment variable. Amasty, repo.magento.com
+and other private repositories therefore work without any flags.
+
+```
++---------------------------+------------------+-------+------------+----------------------+
+| Package                   | Verdict          | Pairs | Violations | Source               |
++---------------------------+------------------+-------+------------+----------------------+
+| amasty/preorder           | ✘ violations     | 10    | 2          | composer.amasty.com  |
+| cweagans/composer-patches | ✔ follows semver | 10    | 0          | repo.packagist.org   |
+| psr/log                   | — unresolved     |       |            | Cannot fetch metadata…|
++---------------------------+------------------+-------+------------+----------------------+
+```
+
+`audit-project` accepts the same `--strict`, `--include-prereleases`, `--limit`
+(default 10 per package), `--cache-dir`, `--report-types`, `--policy` and `--json`
+options as `audit`. The aggregate `--json` output contains per-package summaries
+plus a `summary` block (`total` / `compliant` / `violations` / `unresolved`).
+
+Exit codes: `0` all audited packages compliant, `1` at least one package has
+violations, `2` nothing could be audited.
+
 ## Suggesting the next tag (`next`)
 
 Before tagging a release, run `next` against the package's working copy: it finds the
