@@ -12,6 +12,14 @@ class Http
     private const TIMEOUT_SECONDS = 60;
 
     /**
+     * Some Magento vendor repositories (Amasty, for one) reject requests whose
+     * User-Agent does not look like Composer — they answer 401 "composer
+     * http-basic authentication required" even when the credentials are valid.
+     * So identify as a Composer client while still naming the actual tool.
+     */
+    private const USER_AGENT = 'Composer/2.8.0 (semverdict; +https://github.com/jbrada/semverdict)';
+
+    /**
      * @throws RuntimeException on any HTTP or transport failure
      */
     public static function get(string $url, ?string $basicAuth = null): string
@@ -112,7 +120,7 @@ class Http
      */
     private static function createContext(?string $basicAuth)
     {
-        $headers = ['User-Agent: jbrada/semverdict'];
+        $headers = ['User-Agent: ' . self::USER_AGENT];
         if ($basicAuth !== null) {
             $headers[] = 'Authorization: Basic ' . base64_encode($basicAuth);
         }
